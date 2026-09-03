@@ -238,9 +238,19 @@ function TrayNote() {
 
 // ─── STORE SCREEN ─────────────────────────────────────────────────────────────
 function StoreScreen({ store, flavors, offlineQ, setOfflineQ, onBack }) {
-  const today     = new Date();
-  const weekStart = getWeekStart(today);
-  const todayIdx  = today.getDay() === 0 ? 6 : today.getDay() - 1;
+  const today       = new Date();
+  const currentWeek = getWeekStart(today);
+  const todayIdx    = today.getDay() === 0 ? 6 : today.getDay() - 1;
+
+  // Allow selecting current week or up to 2 previous weeks
+  const weekOptions = [0, 1, 2].map(n => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() - n * 7);
+    return d;
+  });
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = weekOptions[weekOffset];
 
   const [dayIdx, setDayIdx]       = useState(todayIdx);
   const [tab, setTab]             = useState("entry");
@@ -251,10 +261,11 @@ function StoreScreen({ store, flavors, offlineQ, setOfflineQ, onBack }) {
 
   const dayDate = new Date(weekStart); dayDate.setDate(dayDate.getDate() + dayIdx);
 
-  // Load this store's week from DB or local
+  // Reload when store or week changes
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setSavedDays({});
       if (USE_DB) {
         try {
           const rows = await dbSelect("burn_rate_entries", {
@@ -276,7 +287,7 @@ function StoreScreen({ store, flavors, offlineQ, setOfflineQ, onBack }) {
       setLoading(false);
     }
     load();
-  }, [store.id]);
+  }, [store.id, weekOffset]);
 
   useEffect(() => {
     setFormData(savedDays[dayIdx]?.data ?? emptyForm(flavors));
@@ -346,10 +357,27 @@ function StoreScreen({ store, flavors, offlineQ, setOfflineQ, onBack }) {
           <div style={{ flex:1 }}>
             <div style={S.headerTitle}>{store.id} — {store.name}</div>
             <div style={S.headerSub}>
-              Semana: {weekLabel(weekStart)}
-              {syncing && " · ↻ Sincronizando…"}
-              {offlineQ.length > 0 && ` · ⚠ ${offlineQ.length} pendiente(s)`}
+              {syncing && "↻ Sincronizando… · "}
+              {offlineQ.length > 0 && `⚠ ${offlineQ.length} pendiente(s) · `}
             </div>
+          </div>
+          {/* Week selector — current + 2 previous weeks */}
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            {weekOptions.map((ws, i) => (
+              <button key={i}
+                style={{
+                  ...S.tabBtn,
+                  ...(weekOffset === i ? { background:"#444", border:"1px solid #666", color:"#fff" } : {}),
+                  fontSize:11, padding:"4px 10px",
+                }}
+                onClick={() => { setWeekOffset(i); setDayIdx(i === 0 ? todayIdx : 0); }}>
+                {i === 0 ? "📅 Esta semana" : i === 1 ? "⬅ Semana anterior" : "⬅⬅ Hace 2 semanas"}
+              </button>
+            ))}
+          </div>
+          <div style={{ width:"100%", fontSize:12, color:"#555", paddingTop:4 }}>
+            Semana seleccionada: <strong style={{ color:"#aaa" }}>{weekLabel(weekStart)}</strong>
+            {weekOffset > 0 && <span style={{ color:KK_RED, marginLeft:8 }}>⚠ Editando semana pasada</span>}
           </div>
           <TabBar
             tabs={[{ k:"entry", label:"📝 Entrada" }, { k:"weekly", label:"📊 Resumen Semanal" }]}
